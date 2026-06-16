@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangGraph Customer Support Agent — Architecture</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --bg2:       #181c27;
+    --bg3:       #1e2332;
+    --border:    rgba(255,255,255,0.08);
+    --border2:   rgba(255,255,255,0.14);
+    --text:      #e2e4ed;
+    --muted:     #7c8099;
+    --purple:    #8b7cf8;
+    --purple-bg: rgba(139,124,248,0.12);
+    --amber:     #f0a940;
+    --amber-bg:  rgba(240,169,64,0.12);
+    --teal:      #34c9a0;
+    --teal-bg:   rgba(52,201,160,0.12);
+    --coral:     #f07060;
+    --coral-bg:  rgba(240,112,96,0.12);
+    --gray:      #9ca0b0;
+    --gray-bg:   rgba(156,160,176,0.12);
+    --mono:      'JetBrains Mono', 'Fira Mono', monospace;
+    --sans:      'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px 60px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  header p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 36px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 3px;
+  }
+
+  .diagram-wrap {
+    width: 100%;
+    max-width: 780px;
+  }
+
+  svg text { font-family: var(--sans); }
+
+  /* Node styles */
+  .node-purple rect { fill: var(--purple-bg); stroke: var(--purple); stroke-width: 1; }
+  .node-purple .label { fill: var(--purple); font-size: 13px; font-weight: 600; }
+  .node-purple .sublabel { fill: #a89ef8; font-size: 11px; }
+
+  .node-amber rect { fill: var(--amber-bg); stroke: var(--amber); stroke-width: 1; }
+  .node-amber .label { fill: var(--amber); font-size: 13px; font-weight: 600; }
+  .node-amber .sublabel { fill: #c9974a; font-size: 11px; }
+
+  .node-teal rect { fill: var(--teal-bg); stroke: var(--teal); stroke-width: 1; }
+  .node-teal .label { fill: var(--teal); font-size: 13px; font-weight: 600; }
+  .node-teal .sublabel { fill: #5ec9ad; font-size: 11px; }
+
+  .node-coral rect { fill: var(--coral-bg); stroke: var(--coral); stroke-width: 1; }
+  .node-coral .label { fill: var(--coral); font-size: 13px; font-weight: 600; }
+  .node-coral .sublabel { fill: #d4806f; font-size: 11px; }
+
+  .node-gray rect { fill: var(--gray-bg); stroke: var(--gray); stroke-width: 1; }
+  .node-gray .label { fill: var(--gray); font-size: 13px; font-weight: 600; }
+
+  .pydantic-badge rect { fill: rgba(255,255,255,0.04); stroke: rgba(255,255,255,0.12); stroke-width: 0.75; stroke-dasharray: 3 2; }
+  .pydantic-badge .key { fill: #7c8099; font-size: 10px; font-weight: 500; }
+  .pydantic-badge .val { font-size: 10px; font-weight: 600; }
+  .pydantic-badge .val-purple { fill: #a89ef8; }
+  .pydantic-badge .val-amber  { fill: #d4ac6a; }
+
+  .arr { stroke: rgba(255,255,255,0.22); stroke-width: 1; fill: none; }
+  .arr-label { fill: #5a5f78; font-size: 10px; }
+  .leader { stroke: rgba(255,255,255,0.12); stroke-width: 0.75; stroke-dasharray: 3 2; fill: none; }
+
+  .persist-bar rect { fill: rgba(156,160,176,0.07); stroke: rgba(156,160,176,0.2); stroke-width: 0.75; }
+  .persist-bar text { fill: var(--muted); font-size: 10.5px; }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text);
+    max-width: 260px;
+    line-height: 1.5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 99;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip .tt-title { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+  .tooltip .tt-code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); background: rgba(255,255,255,0.04); padding: 2px 5px; border-radius: 4px; display: inline-block; margin-top: 3px; }
+
+  .clickable { cursor: pointer; }
+  .clickable rect { transition: filter 0.15s; }
+  .clickable:hover rect { filter: brightness(1.25); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LangGraph Customer Support Agent</h1>
+  <p>Architecture diagram · hover nodes for detail · GPT-4o-mini + LangGraph + SQLite</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#8b7cf8"></div>LLM node (GPT-4o-mini)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0a940"></div>Human-in-the-loop gate</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34c9a0"></div>Data / retrieval / output</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f07060"></div>Escalation path</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.08); border:1px dashed rgba(255,255,255,0.2)"></div>Pydantic model</div>
+</div>
+
+<div class="diagram-wrap">
+<svg width="100%" viewBox="0 0 780 930" role="img">
+  <title>LangGraph Customer Support Agent Architecture</title>
+  <desc>Flowchart of the LangGraph customer support agent showing 7 nodes, 2 human-in-the-loop interrupt gates, pydantic model usage, and SQLite persistence.</desc>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(240,112,96,0.4)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- ── START ── -->
+  <g class="node-gray">
+    <rect x="300" y="16" width="180" height="34" rx="17"/>
+    <text class="label" x="390" y="37" text-anchor="middle">START</text>
+  </g>
+  <line x1="390" y1="50" x2="390" y2="80" class="arr" marker-end="url(#arr)"/>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 1: classify_ticket -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-purple clickable" id="n-classify" data-tt="classify">
+    <rect x="200" y="80" width="380" height="58" rx="8"/>
+    <text class="label" x="390" y="101" text-anchor="middle">classify_ticket</text>
+    <text class="sublabel" x="390" y="118" text-anchor="middle">GPT-4o-mini → TicketClassification (structured output)</text>
+  </g>
+  <!-- Pydantic badge: TicketClassification -->
+  <g class="pydantic-badge clickable" id="n-tc" data-tt="tc">
+    <rect x="595" y="82" width="170" height="52" rx="6"/>
+    <text class="key" x="605" y="96">Pydantic model</text>
+    <text class="val val-purple" x="605" y="112" style="font-family:monospace;font-size:11px">TicketClassification</text>
+    <text class="key" x="605" y="127">category · intent · priority</text>
+    <text class="key" x="605" y="139">sentiment · confidence</text>
+  </g>
+  <line x1="580" y1="107" x2="595" y2="107" class="leader"/>
+
+  <line x1="390" y1="138" x2="390" y2="168" class="arr" marker-end="url(#arr)"/>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 2: approval_gate -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-amber clickable" id="n-approval" data-tt="approval">
+    <rect x="200" y="168" width="380" height="70" rx="8"/>
+    <text class="label" x="390" y="190" text-anchor="middle">approval_gate</text>
+    <text class="sublabel" x="390" y="207" text-anchor="middle">billing / account / high-priority / low-confidence</text>
+    <text class="sublabel" x="390" y="222" text-anchor="middle">→ interrupt()  ·  else auto-approved</text>
+  </g>
+  <!-- Human badge -->
+  <g class="pydantic-badge">
+    <rect x="595" y="170" width="170" height="64" rx="20"/>
+    <text class="key" x="680" y="188" text-anchor="middle">👤 Human review 1</text>
+    <text class="val val-amber" x="680" y="205" text-anchor="middle" style="font-size:11px;font-family:monospace">interrupt()</text>
+    <text class="key" x="680" y="221" text-anchor="middle">decision: approved</text>
+    <text class="key" x="680" y="233" text-anchor="middle">      or: escalate</text>
+  </g>
+  <line x1="580" y1="203" x2="595" y2="203" class="leader"/>
+
+  <!-- Escalate-early path (left branch) -->
+  <path d="M200 225 L140 225 L140 680 L210 680" class="arr" stroke="rgba(240,112,96,0.35)" stroke-dasharray="5 3" fill="none" marker-end="url(#arr-muted)"/>
+  <text class="arr-label" x="108" y="452" text-anchor="middle" transform="rotate(-90,108,452)" style="fill:#d4806f">escalate</text>
+
+  <!-- approved arrow -->
+  <line x1="390" y1="238" x2="390" y2="268" class="arr" marker-end="url(#arr)"/>
+  <text class="arr-label" x="408" y="255" dominant-baseline="central">approved</text>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 3: retrieve_knowledge -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-teal clickable" id="n-retrieve" data-tt="retrieve">
+    <rect x="200" y="268" width="380" height="58" rx="8"/>
+    <text class="label" x="390" y="291" text-anchor="middle">retrieve_knowledge</text>
+    <text class="sublabel" x="390" y="308" text-anchor="middle">Keyword + category score → top-3 docs from KNOWLEDGE_BASE</text>
+  </g>
+  <!-- KB badge -->
+  <g class="pydantic-badge">
+    <rect x="595" y="270" width="170" height="52" rx="6"/>
+    <text class="key" x="605" y="284">Knowledge base</text>
+    <text class="val" x="605" y="300" style="fill:#34c9a0;font-size:11px;font-family:monospace">6 articles</text>
+    <text class="key" x="605" y="314">billing · technical</text>
+    <text class="key" x="605" y="326">order · account</text>
+  </g>
+  <line x1="580" y1="297" x2="595" y2="297" class="leader"/>
+
+  <line x1="390" y1="326" x2="390" y2="356" class="arr" marker-end="url(#arr)"/>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 4: draft_resolution -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-purple clickable" id="n-draft" data-tt="draft">
+    <rect x="200" y="356" width="380" height="58" rx="8"/>
+    <text class="label" x="390" y="379" text-anchor="middle">draft_resolution</text>
+    <text class="sublabel" x="390" y="396" text-anchor="middle">GPT-4o-mini → ResolutionDecision (structured output)</text>
+  </g>
+  <!-- Pydantic badge: ResolutionDecision -->
+  <g class="pydantic-badge clickable" id="n-rd" data-tt="rd">
+    <rect x="595" y="358" width="170" height="52" rx="6"/>
+    <text class="key" x="605" y="372">Pydantic model</text>
+    <text class="val val-purple" x="605" y="388" style="font-family:monospace;font-size:11px">ResolutionDecision</text>
+    <text class="key" x="605" y="404">draft_response · needs_escalation</text>
+    <text class="key" x="605" y="416">escalation_reason · confidence</text>
+  </g>
+  <line x1="580" y1="385" x2="595" y2="385" class="leader"/>
+
+  <line x1="390" y1="414" x2="390" y2="444" class="arr" marker-end="url(#arr)"/>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 5: final_review_gate -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-amber clickable" id="n-final" data-tt="final">
+    <rect x="200" y="444" width="380" height="70" rx="8"/>
+    <text class="label" x="390" y="466" text-anchor="middle">final_review_gate</text>
+    <text class="sublabel" x="390" y="483" text-anchor="middle">needs_escalation / low-confidence / high-priority / billing</text>
+    <text class="sublabel" x="390" y="498" text-anchor="middle">→ interrupt()  ·  else auto-approve draft</text>
+  </g>
+  <!-- Human badge 2 -->
+  <g class="pydantic-badge">
+    <rect x="595" y="446" width="170" height="64" rx="20"/>
+    <text class="key" x="680" y="464" text-anchor="middle">👤 Human review 2</text>
+    <text class="val val-amber" x="680" y="481" text-anchor="middle" style="font-size:11px;font-family:monospace">interrupt()</text>
+    <text class="key" x="680" y="497" text-anchor="middle">decision: approve</text>
+    <text class="key" x="680" y="509" text-anchor="middle">      edit | escalate</text>
+  </g>
+  <line x1="580" y1="479" x2="595" y2="479" class="leader"/>
+
+  <!-- resolve arrow -->
+  <path d="M270 514 L230 514 L230 620" class="arr" fill="none" stroke="rgba(255,255,255,0.22)" marker-end="url(#arr)"/>
+  <text class="arr-label" x="205" y="565" text-anchor="middle">resolve</text>
+
+  <!-- escalate arrow -->
+  <path d="M510 514 L550 514 L550 620" class="arr" fill="none" stroke="rgba(240,112,96,0.4)" stroke-dasharray="5 3" marker-end="url(#arr-muted)"/>
+  <text class="arr-label" x="573" y="565" text-anchor="middle" style="fill:#d4806f">escalate</text>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 6: resolve_case -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-teal clickable" id="n-resolve" data-tt="resolve">
+    <rect x="100" y="620" width="260" height="58" rx="8"/>
+    <text class="label" x="230" y="643" text-anchor="middle">resolve_case</text>
+    <text class="sublabel" x="230" y="660" text-anchor="middle">Sends final_response to customer</text>
+  </g>
+
+  <!-- ─────────────────────────────────────────── -->
+  <!-- NODE 7: escalate_case -->
+  <!-- ─────────────────────────────────────────── -->
+  <g class="node-coral clickable" id="n-escalate" data-tt="escalate">
+    <rect x="420" y="620" width="260" height="58" rx="8"/>
+    <text class="label" x="550" y="643" text-anchor="middle">escalate_case</text>
+    <text class="sublabel" x="550" y="660" text-anchor="middle">Routes ticket to human specialist</text>
+  </g>
+
+  <!-- resolve → END -->
+  <line x1="230" y1="678" x2="230" y2="760" class="arr" marker-end="url(#arr)"/>
+  <!-- escalate → END -->
+  <line x1="550" y1="678" x2="550" y2="760" class="arr" stroke="rgba(240,112,96,0.4)" stroke-dasharray="5 3" fill="none" marker-end="url(#arr-muted)"/>
+  <!-- merge lines to END -->
+  <path d="M230 760 L390 788" class="arr" fill="none" stroke="rgba(255,255,255,0.22)" marker-end="url(#arr)"/>
+  <path d="M550 760 L390 788" class="arr" fill="none" stroke="rgba(255,255,255,0.22)" marker-end="url(#arr)"/>
+
+  <!-- ── END ── -->
+  <g class="node-gray">
+    <rect x="300" y="788" width="180" height="34" rx="17"/>
+    <text class="label" x="390" y="809" text-anchor="middle">END</text>
+  </g>
+
+  <!-- ── SQLite persistence bar ── -->
+  <g class="persist-bar">
+    <rect x="30" y="850" width="720" height="30" rx="6"/>
+    <text x="390" y="869" text-anchor="middle">
+      💾  SqliteSaver checkpointer — full SupportState persisted per thread_id · resume across sessions via graph.get_state()
+    </text>
+  </g>
+
+  <!-- ── SupportState sidebar (left) ── -->
+  <g class="pydantic-badge">
+    <rect x="14" y="80" width="170" height="144" rx="6"/>
+    <text class="key" x="24" y="96">SupportState (TypedDict)</text>
+    <text class="val val-purple" x="24" y="112" style="font-size:10px;font-family:monospace">customer_id, customer_message</text>
+    <text class="key" x="24" y="126">category · intent · priority</text>
+    <text class="key" x="24" y="140">sentiment · confidence</text>
+    <text class="key" x="24" y="154">initial_route · approval_decision</text>
+    <text class="key" x="24" y="168">retrieved_docs · draft_response</text>
+    <text class="key" x="24" y="182">final_response · needs_escalation</text>
+    <text class="key" x="24" y="196">escalation_reason · status</text>
+    <text class="key" x="24" y="210" style="font-style:italic">Passed through every node</text>
+  </g>
+  <line x1="184" y1="152" x2="200" y2="152" class="leader"/>
+
+</svg>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <div id="tt-body"></div>
+</div>
+
+<script>
+const tips = {
+  classify: {
+    title: 'classify_ticket',
+    body: 'Calls GPT-4o-mini with structured output. Uses <span class="tt-code">classifier = llm.with_structured_output(TicketClassification)</span>. Sets initial_route to "retrieve" or "escalate" based on intent.'
+  },
+  tc: {
+    title: 'TicketClassification (Pydantic)',
+    body: 'Fields: <span class="tt-code">category</span> (billing|technical|order|account|general), <span class="tt-code">intent</span>, <span class="tt-code">priority</span>, <span class="tt-code">sentiment</span>, <span class="tt-code">confidence: float</span>, <span class="tt-code">rationale: str</span>'
+  },
+  approval: {
+    title: 'approval_gate',
+    body: 'Checks priority, confidence, and category. If high-risk: calls <span class="tt-code">interrupt()</span> — graph pauses. Resumed via <span class="tt-code">Command(resume={decision, notes})</span>.'
+  },
+  retrieve: {
+    title: 'retrieve_knowledge',
+    body: 'Uses <span class="tt-code">simple_retrieve(query, category, top_k=3)</span>. Scores KNOWLEDGE_BASE docs by category match (+3) and word overlap. Returns top-3 as <span class="tt-code">retrieved_docs</span> in state.'
+  },
+  draft: {
+    title: 'draft_resolution',
+    body: 'Calls GPT-4o-mini via <span class="tt-code">resolver = llm.with_structured_output(ResolutionDecision)</span>. Builds prompt from state fields + retrieved KB docs.'
+  },
+  rd: {
+    title: 'ResolutionDecision (Pydantic)',
+    body: 'Fields: <span class="tt-code">draft_response: str</span>, <span class="tt-code">needs_escalation: bool</span>, <span class="tt-code">escalation_reason: str</span>, <span class="tt-code">confidence: float</span>'
+  },
+  final: {
+    title: 'final_review_gate',
+    body: 'Second human interrupt. Options: <span class="tt-code">approve</span> → uses draft as-is. <span class="tt-code">edit</span> → replaces draft_response. <span class="tt-code">escalate</span> → sets needs_escalation=True.'
+  },
+  resolve: {
+    title: 'resolve_case',
+    body: 'Terminal node. Sets <span class="tt-code">status = "resolved"</span> and copies final_response. No LLM call — purely state bookkeeping.'
+  },
+  escalate: {
+    title: 'escalate_case',
+    body: 'Terminal node. Sets <span class="tt-code">status = "escalated"</span> and writes a message referencing <span class="tt-code">escalation_reason</span>. Routed here from approval_gate or final_review_gate.'
+  }
+};
+
+const tt = document.getElementById('tooltip');
+const ttTitle = document.getElementById('tt-title');
+const ttBody = document.getElementById('tt-body');
+
+document.querySelectorAll('[data-tt]').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    const key = el.dataset.tt;
+    if (!tips[key]) return;
+    ttTitle.textContent = tips[key].title;
+    ttBody.innerHTML = tips[key].body;
+    tt.classList.add('show');
+  });
+  el.addEventListener('mousemove', e => {
+    tt.style.left = (e.clientX + 14) + 'px';
+    tt.style.top  = (e.clientY + 14) + 'px';
+  });
+  el.addEventListener('mouseleave', () => tt.classList.remove('show'));
+});
+</script>
+</body>
+</html>

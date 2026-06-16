@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangGraph Customer Support Agent — Architecture</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d1018;
+  --bg2:       #141820;
+  --bg3:       #1a1f2e;
+  --bg4:       #1e2435;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --text:      #dde0ec;
+  --muted:     #6b708c;
+  --muted2:    #9298b0;
+  --purple:    #9b8ef9;
+  --purple-bg: rgba(155,142,249,0.10);
+  --purple-dk: rgba(155,142,249,0.20);
+  --amber:     #f0b040;
+  --amber-bg:  rgba(240,176,64,0.10);
+  --amber-dk:  rgba(240,176,64,0.20);
+  --teal:      #38d4a8;
+  --teal-bg:   rgba(56,212,168,0.10);
+  --coral:     #f07060;
+  --coral-bg:  rgba(240,112,96,0.10);
+  --gray:      #9ca0b4;
+  --gray-bg:   rgba(156,160,180,0.10);
+  --mono:      'JetBrains Mono','Fira Mono','Cascadia Code',monospace;
+  --sans:      'Inter',system-ui,sans-serif;
+  --r:         8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── PAGE HEADER ── */
+.page-header {
+  border-bottom: 1px solid var(--border);
+  padding: 28px 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.page-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--text);
+}
+.page-header .sub {
+  font-size: 12.5px;
+  color: var(--muted2);
+}
+.pill-row {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px;
+}
+.pill {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  background: var(--bg3);
+}
+
+/* ── LEGEND ── */
+.legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 16px 40px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+.legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--muted2);
+}
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+}
+
+/* ── THREE-COLUMN LAYOUT ── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr 300px;
+  gap: 0;
+  min-height: 80vh;
+  align-items: start;
+}
+
+/* ── SIDE PANELS ── */
+.side-panel {
+  padding: 24px 20px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.side-panel.right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+.panel-section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.panel-section-header {
+  padding: 10px 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.panel-section-header .dot {
+  width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0;
+}
+.panel-section-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* info rows */
+.info-row {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.info-icon {
+  font-size: 15px; flex-shrink: 0; margin-top: 1px;
+}
+.info-text { flex: 1; }
+.info-title {
+  font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px;
+}
+.info-body {
+  font-size: 11.5px; color: var(--muted2); line-height: 1.55;
+}
+
+code, .code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--purple);
+}
+
+/* field list */
+.field-list { display: flex; flex-direction: column; gap: 5px; }
+.field-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 8px;
+  background: var(--bg3);
+  border-radius: 5px;
+  gap: 8px;
+}
+.field-name { font-family: var(--mono); font-size: 10.5px; color: var(--purple); }
+.field-type { font-family: var(--mono); font-size: 10px; color: var(--muted2); }
+.field-note { font-size: 10.5px; color: var(--muted); flex: 1; text-align: right; }
+
+/* routing table */
+.routing-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.routing-table th {
+  text-align: left; padding: 5px 8px;
+  color: var(--muted); font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+.routing-table td {
+  padding: 5px 8px; vertical-align: top;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--muted2);
+}
+.routing-table tr:last-child td { border-bottom: none; }
+.tag {
+  display: inline-block;
+  font-size: 10px; padding: 1px 7px;
+  border-radius: 10px; font-weight: 500;
+}
+.tag-amber  { background: var(--amber-bg);  color: var(--amber);  border: 1px solid rgba(240,176,64,0.3); }
+.tag-teal   { background: var(--teal-bg);   color: var(--teal);   border: 1px solid rgba(56,212,168,0.3); }
+.tag-coral  { background: var(--coral-bg);  color: var(--coral);  border: 1px solid rgba(240,112,96,0.3); }
+.tag-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(155,142,249,0.3); }
+
+/* divider */
+.divider {
+  height: 1px; background: var(--border); margin: 4px 0;
+}
+
+/* callout */
+.callout {
+  background: var(--bg3);
+  border-left: 3px solid var(--purple);
+  border-radius: 0 5px 5px 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  color: var(--muted2);
+  line-height: 1.55;
+}
+.callout.amber { border-left-color: var(--amber); }
+.callout.teal  { border-left-color: var(--teal); }
+.callout.coral { border-left-color: var(--coral); }
+
+/* ── DIAGRAM COLUMN ── */
+.diagram-col {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.diagram-col svg text { font-family: var(--sans); }
+
+/* SVG node classes */
+.node-purple rect { fill: var(--purple-bg); stroke: var(--purple); stroke-width: 1; }
+.node-purple .label { fill: var(--purple); font-size: 12.5px; font-weight: 600; }
+.node-purple .sublabel { fill: #a89ef8; font-size: 10.5px; }
+
+.node-amber rect { fill: var(--amber-bg); stroke: var(--amber); stroke-width: 1; }
+.node-amber .label { fill: var(--amber); font-size: 12.5px; font-weight: 600; }
+.node-amber .sublabel { fill: #c9974a; font-size: 10.5px; }
+
+.node-teal rect { fill: var(--teal-bg); stroke: var(--teal); stroke-width: 1; }
+.node-teal .label { fill: var(--teal); font-size: 12.5px; font-weight: 600; }
+.node-teal .sublabel { fill: #5ec9ad; font-size: 10.5px; }
+
+.node-coral rect { fill: var(--coral-bg); stroke: var(--coral); stroke-width: 1; }
+.node-coral .label { fill: var(--coral); font-size: 12.5px; font-weight: 600; }
+.node-coral .sublabel { fill: #d4806f; font-size: 10.5px; }
+
+.node-gray rect { fill: var(--gray-bg); stroke: var(--gray); stroke-width: 1; }
+.node-gray .label { fill: var(--gray); font-size: 12.5px; font-weight: 600; }
+
+.badge rect { fill: rgba(255,255,255,0.03); stroke: rgba(255,255,255,0.10); stroke-width: 0.75; stroke-dasharray: 3 2; }
+.badge .bkey { fill: #5a5f78; font-size: 9.5px; }
+.badge .bval { font-size: 10px; font-weight: 600; }
+.badge .bval-purple { fill: #a89ef8; }
+.badge .bval-amber  { fill: #c9974a; }
+.badge .bval-teal   { fill: #38d4a8; }
+
+.arr  { stroke: rgba(255,255,255,0.20); stroke-width: 1; fill: none; }
+.arrd { stroke: rgba(240,112,96,0.35); stroke-width: 1; fill: none; stroke-dasharray: 5 3; }
+.alabel { fill: #4a5070; font-size: 9.5px; }
+.leader { stroke: rgba(255,255,255,0.10); stroke-width: 0.75; stroke-dasharray: 3 2; fill: none; }
+
+.persist rect { fill: rgba(156,160,180,0.05); stroke: rgba(156,160,180,0.15); stroke-width: 0.75; }
+
+.clickable { cursor: default; }
+
+/* ── BOTTOM SECTIONS ── */
+.bottom-sections {
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+}
+.bottom-section {
+  padding: 24px 28px;
+  border-right: 1px solid var(--border);
+}
+.bottom-section:last-child { border-right: none; }
+.bottom-section h3 {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.bottom-section h3 .accent { color: var(--purple); }
+.step-list { display: flex; flex-direction: column; gap: 10px; }
+.step-item {
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.step-num {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--purple-bg); border: 1px solid rgba(155,142,249,0.3);
+  color: var(--purple); font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.step-num.amber { background: var(--amber-bg); border-color: rgba(240,176,64,0.3); color: var(--amber); }
+.step-num.teal  { background: var(--teal-bg);  border-color: rgba(56,212,168,0.3);  color: var(--teal); }
+.step-text { font-size: 11.5px; color: var(--muted2); line-height: 1.55; }
+.step-text strong { color: var(--text); font-weight: 600; }
+
+/* ── TOOLTIP ── */
+.tooltip {
+  position: fixed;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: 9px;
+  padding: 11px 15px;
+  font-size: 11.5px;
+  color: var(--text);
+  max-width: 270px;
+  line-height: 1.55;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 99;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.tooltip.show { opacity: 1; }
+.tt-title { font-weight: 600; font-size: 12.5px; margin-bottom: 5px; color: var(--text); }
+.tt-code  { font-family: var(--mono); font-size: 10px; color: var(--purple); background: rgba(155,142,249,0.08); padding: 2px 5px; border-radius: 4px; display: inline; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ PAGE HEADER ══════════════════ -->
+<header class="page-header">
+  <h1>LangGraph Customer Support Agent — Architecture</h1>
+  <p class="sub">A stateful, human-in-the-loop support pipeline built with LangGraph, GPT-4o-mini, Pydantic, and SQLite</p>
+  <div class="pill-row">
+    <span class="pill">LangGraph 0.x</span>
+    <span class="pill">GPT-4o-mini</span>
+    <span class="pill">Pydantic v2</span>
+    <span class="pill">SQLite checkpointing</span>
+    <span class="pill">Human-in-the-loop</span>
+    <span class="pill">RAG (keyword)</span>
+  </div>
+</header>
+
+<!-- ══════════════════ LEGEND ══════════════════ -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#9b8ef9"></div>LLM node (GPT-4o-mini)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0b040"></div>Human-in-the-loop gate</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#38d4a8"></div>Retrieval / terminal output</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f07060"></div>Escalation path</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.18)"></div>Pydantic / data annotation</div>
+</div>
+
+<!-- ══════════════════ MAIN THREE-COLUMN ══════════════════ -->
+<div class="main-grid">
+
+  <!-- ─── LEFT PANEL ─── -->
+  <aside class="side-panel">
+
+    <!-- Why Pydantic -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#9b8ef9"></div>Why Pydantic models?
+      </div>
+      <div class="panel-section-body">
+        <div class="info-row">
+          <div class="info-icon">🔒</div>
+          <div class="info-text">
+            <div class="info-title">Guaranteed structured output</div>
+            <div class="info-body">LLMs return free-text. <code>llm.with_structured_output(Model)</code> forces the model to emit JSON matching the schema — no string parsing, no regex.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">✅</div>
+          <div class="info-text">
+            <div class="info-title">Runtime validation</div>
+            <div class="info-body">Pydantic validates every field at parse time. If the LLM hallucinates an invalid <code>priority</code> value, the call raises immediately instead of silently corrupting state.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">📐</div>
+          <div class="info-text">
+            <div class="info-title">Typed routing logic</div>
+            <div class="info-body">Downstream nodes read <code>result.needs_escalation</code> (bool) or <code>result.priority</code> (Literal) — no dict key errors, full IDE autocomplete.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">🧠</div>
+          <div class="info-text">
+            <div class="info-title">Acts as a prompt</div>
+            <div class="info-body">Field names and <code>Field(description=...)</code> docstrings are injected into the system prompt automatically. The schema <em>is</em> the instruction.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TicketClassification -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#9b8ef9"></div>TicketClassification
+      </div>
+      <div class="panel-section-body">
+        <div class="callout">Used in <strong>classify_ticket</strong> via <code>llm.with_structured_output(TicketClassification)</code></div>
+        <div class="field-list">
+          <div class="field-row">
+            <span class="field-name">category</span>
+            <span class="field-type">Literal[5]</span>
+            <span class="field-note">billing·tech·order…</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">intent</span>
+            <span class="field-type">Literal[9]</span>
+            <span class="field-note">refund_request…</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">priority</span>
+            <span class="field-type">Literal[4]</span>
+            <span class="field-note">low·medium·high·urgent</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">sentiment</span>
+            <span class="field-type">Literal[4]</span>
+            <span class="field-note">positive·neutral…</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">confidence</span>
+            <span class="field-type">float</span>
+            <span class="field-note">0.0 → 1.0</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">rationale</span>
+            <span class="field-type">str</span>
+            <span class="field-note">short explanation</span>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:4px">
+          <strong>Why Literal types?</strong> Restricts the LLM to exactly the allowed values. A free string field would let the model return "Billing" vs "billing" vs "BILLING" — breaking routing.
+        </div>
+      </div>
+    </div>
+
+    <!-- SupportState -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#9ca0b4"></div>SupportState (TypedDict)
+      </div>
+      <div class="panel-section-body">
+        <div class="callout teal">The shared memory bus. Every node reads from and writes to this dict. LangGraph merges partial returns automatically.</div>
+        <div class="field-list">
+          <div class="field-row"><span class="field-name">customer_id</span><span class="field-note">input</span></div>
+          <div class="field-row"><span class="field-name">customer_message</span><span class="field-note">input</span></div>
+          <div class="field-row"><span class="field-name">category / intent</span><span class="field-note">set by classify</span></div>
+          <div class="field-row"><span class="field-name">priority / sentiment</span><span class="field-note">set by classify</span></div>
+          <div class="field-row"><span class="field-name">initial_route</span><span class="field-note">routing hint</span></div>
+          <div class="field-row"><span class="field-name">approval_decision</span><span class="field-note">gate 1 output</span></div>
+          <div class="field-row"><span class="field-name">retrieved_docs</span><span class="field-note">List[Dict]</span></div>
+          <div class="field-row"><span class="field-name">draft_response</span><span class="field-note">LLM draft</span></div>
+          <div class="field-row"><span class="field-name">needs_escalation</span><span class="field-note">bool flag</span></div>
+          <div class="field-row"><span class="field-name">final_response</span><span class="field-note">sent to customer</span></div>
+          <div class="field-row"><span class="field-name">status</span><span class="field-note">lifecycle label</span></div>
+        </div>
+        <div class="callout" style="margin-top:4px">
+          Why TypedDict not Pydantic? LangGraph requires the state to be a plain dict subclass so it can merge partial updates from each node. Pydantic BaseModel is used only for LLM I/O where validation is needed.
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ─── DIAGRAM COLUMN ─── -->
+  <main class="diagram-col">
+    <svg width="100%" viewBox="0 0 540 940" role="img">
+      <title>LangGraph Customer Support Agent — node graph</title>
+      <desc>Seven nodes connected by directed edges, with two human interrupt gates and SQLite persistence.</desc>
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(255,255,255,0.20)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="arrd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="rgba(240,112,96,0.45)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- START -->
+      <g class="node-gray">
+        <rect x="185" y="14" width="170" height="32" rx="16"/>
+        <text class="label" x="270" y="34" text-anchor="middle" dominant-baseline="central">START</text>
+      </g>
+      <line x1="270" y1="46" x2="270" y2="74" class="arr" marker-end="url(#arr)"/>
+
+      <!-- NODE 1: classify_ticket -->
+      <g class="node-purple clickable" data-tt="classify">
+        <rect x="90" y="74" width="360" height="60" rx="8"/>
+        <text class="label" x="270" y="96" text-anchor="middle" dominant-baseline="central">classify_ticket</text>
+        <text class="sublabel" x="270" y="116" text-anchor="middle" dominant-baseline="central">GPT-4o-mini → TicketClassification</text>
+      </g>
+      <line x1="270" y1="134" x2="270" y2="162" class="arr" marker-end="url(#arr)"/>
+
+      <!-- NODE 2: approval_gate -->
+      <g class="node-amber clickable" data-tt="approval">
+        <rect x="90" y="162" width="360" height="70" rx="8"/>
+        <text class="label" x="270" y="184" text-anchor="middle" dominant-baseline="central">approval_gate</text>
+        <text class="sublabel" x="270" y="202" text-anchor="middle" dominant-baseline="central">billing / account / high-risk → interrupt()</text>
+        <text class="sublabel" x="270" y="220" text-anchor="middle" dominant-baseline="central">low-risk → auto-approve</text>
+      </g>
+
+      <!-- early escalate path (left) -->
+      <path d="M90 215 L50 215 L50 680 L140 680" class="arrd" marker-end="url(#arrd)"/>
+      <text class="alabel" x="28" y="447" text-anchor="middle" transform="rotate(-90,28,447)" style="fill:#c47060">escalate early</text>
+
+      <!-- approved arrow -->
+      <line x1="270" y1="232" x2="270" y2="260" class="arr" marker-end="url(#arr)"/>
+      <text class="alabel" x="284" y="248" dominant-baseline="central">approved</text>
+
+      <!-- NODE 3: retrieve_knowledge -->
+      <g class="node-teal clickable" data-tt="retrieve">
+        <rect x="90" y="260" width="360" height="60" rx="8"/>
+        <text class="label" x="270" y="282" text-anchor="middle" dominant-baseline="central">retrieve_knowledge</text>
+        <text class="sublabel" x="270" y="301" text-anchor="middle" dominant-baseline="central">keyword + category score → top-3 KB docs</text>
+      </g>
+      <line x1="270" y1="320" x2="270" y2="348" class="arr" marker-end="url(#arr)"/>
+
+      <!-- NODE 4: draft_resolution -->
+      <g class="node-purple clickable" data-tt="draft">
+        <rect x="90" y="348" width="360" height="60" rx="8"/>
+        <text class="label" x="270" y="370" text-anchor="middle" dominant-baseline="central">draft_resolution</text>
+        <text class="sublabel" x="270" y="389" text-anchor="middle" dominant-baseline="central">GPT-4o-mini → ResolutionDecision</text>
+      </g>
+      <line x1="270" y1="408" x2="270" y2="436" class="arr" marker-end="url(#arr)"/>
+
+      <!-- NODE 5: final_review_gate -->
+      <g class="node-amber clickable" data-tt="final">
+        <rect x="90" y="436" width="360" height="70" rx="8"/>
+        <text class="label" x="270" y="458" text-anchor="middle" dominant-baseline="central">final_review_gate</text>
+        <text class="sublabel" x="270" y="476" text-anchor="middle" dominant-baseline="central">risky / low-confidence → interrupt()</text>
+        <text class="sublabel" x="270" y="494" text-anchor="middle" dominant-baseline="central">safe → auto-approve draft</text>
+      </g>
+
+      <!-- resolve arrow -->
+      <path d="M170 506 L140 506 L140 620" class="arr" fill="none" marker-end="url(#arr)"/>
+      <text class="alabel" x="118" y="560" text-anchor="middle">resolve</text>
+
+      <!-- escalate arrow -->
+      <path d="M370 506 L400 506 L400 620" class="arrd" fill="none" marker-end="url(#arrd)"/>
+      <text class="alabel" x="420" y="560" text-anchor="middle" style="fill:#c47060">escalate</text>
+
+      <!-- NODE 6: resolve_case -->
+      <g class="node-teal clickable" data-tt="resolve">
+        <rect x="40" y="620" width="200" height="56" rx="8"/>
+        <text class="label" x="140" y="642" text-anchor="middle" dominant-baseline="central">resolve_case</text>
+        <text class="sublabel" x="140" y="660" text-anchor="middle" dominant-baseline="central">send final_response</text>
+      </g>
+
+      <!-- NODE 7: escalate_case -->
+      <g class="node-coral clickable" data-tt="escalate">
+        <rect x="300" y="620" width="200" height="56" rx="8"/>
+        <text class="label" x="400" y="642" text-anchor="middle" dominant-baseline="central">escalate_case</text>
+        <text class="sublabel" x="400" y="660" text-anchor="middle" dominant-baseline="central">route to specialist</text>
+      </g>
+
+      <!-- resolve → END -->
+      <line x1="140" y1="676" x2="140" y2="750" class="arr" marker-end="url(#arr)"/>
+      <!-- escalate → END -->
+      <line x1="400" y1="676" x2="400" y2="750" class="arrd" marker-end="url(#arrd)"/>
+      <!-- merge to END -->
+      <path d="M140 750 L270 778" class="arr" fill="none" marker-end="url(#arr)"/>
+      <path d="M400 750 L270 778" class="arr" fill="none" marker-end="url(#arr)"/>
+
+      <!-- END -->
+      <g class="node-gray">
+        <rect x="185" y="778" width="170" height="32" rx="16"/>
+        <text class="label" x="270" y="798" text-anchor="middle" dominant-baseline="central">END</text>
+      </g>
+
+      <!-- SQLite bar -->
+      <g class="persist">
+        <rect x="20" y="832" width="500" height="28" rx="6"/>
+        <text x="270" y="849" text-anchor="middle" dominant-baseline="central" style="fill:#6b708c;font-size:10.5px">
+          💾  SqliteSaver · state persisted per thread_id · resumable across sessions
+        </text>
+      </g>
+
+      <!-- step labels on left of diagram -->
+      <text class="alabel" x="88" y="105" text-anchor="end" style="font-size:9px;fill:#4a5070">① classify</text>
+      <text class="alabel" x="88" y="200" text-anchor="end" style="font-size:9px;fill:#4a5070">② gate 1</text>
+      <text class="alabel" x="88" y="292" text-anchor="end" style="font-size:9px;fill:#4a5070">③ retrieve</text>
+      <text class="alabel" x="88" y="380" text-anchor="end" style="font-size:9px;fill:#4a5070">④ draft</text>
+      <text class="alabel" x="88" y="475" text-anchor="end" style="font-size:9px;fill:#4a5070">⑤ gate 2</text>
+      <text class="alabel" x="88" y="652" text-anchor="end" style="font-size:9px;fill:#4a5070">⑥a resolve</text>
+      <text class="alabel" x="452" y="652" text-anchor="start" style="font-size:9px;fill:#4a5070">⑥b escalate</text>
+
+    </svg>
+  </main>
+
+  <!-- ─── RIGHT PANEL ─── -->
+  <aside class="side-panel right">
+
+    <!-- Why this architecture -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#f0b040"></div>Why this architecture?
+      </div>
+      <div class="panel-section-body">
+        <div class="info-row">
+          <div class="info-icon">🔁</div>
+          <div class="info-text">
+            <div class="info-title">Stateful graph (not a chain)</div>
+            <div class="info-body">A LangChain chain is stateless — it can't pause mid-run. LangGraph's <code>StateGraph</code> checkpoints after every node so the process can suspend for human input and resume later, even in a new Python process.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">🪢</div>
+          <div class="info-text">
+            <div class="info-title">Two-gate safety model</div>
+            <div class="info-body">Gate 1 reviews the <em>classification</em> before any LLM drafting happens — cheap to catch mistakes early. Gate 2 reviews the <em>draft response</em> before it reaches the customer — last line of defence.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">↔️</div>
+          <div class="info-text">
+            <div class="info-title">Conditional routing, not if/else</div>
+            <div class="info-body"><code>add_conditional_edges</code> maps routing functions to nodes declaratively. Changing who gets escalated means editing the router, not the node logic — concerns stay separated.</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="info-row">
+          <div class="info-icon">💾</div>
+          <div class="info-text">
+            <div class="info-title">SQLite = free persistence</div>
+            <div class="info-body">Every state snapshot is keyed by <code>thread_id</code>. A new customer session gets a new thread. You can replay, audit, or resume any ticket by thread ID — no extra infrastructure needed.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ResolutionDecision -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#9b8ef9"></div>ResolutionDecision
+      </div>
+      <div class="panel-section-body">
+        <div class="callout">Used in <strong>draft_resolution</strong> via <code>llm.with_structured_output(ResolutionDecision)</code></div>
+        <div class="field-list">
+          <div class="field-row">
+            <span class="field-name">draft_response</span>
+            <span class="field-type">str</span>
+            <span class="field-note">customer-facing text</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">needs_escalation</span>
+            <span class="field-type">bool</span>
+            <span class="field-note">routes final gate</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">escalation_reason</span>
+            <span class="field-type">str</span>
+            <span class="field-note">shown to specialist</span>
+          </div>
+          <div class="field-row">
+            <span class="field-name">confidence</span>
+            <span class="field-type">float</span>
+            <span class="field-note">triggers gate if &lt;0.80</span>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:4px">
+          <strong>Why bool for escalation?</strong> A typed boolean drives a Python conditional directly. A free-text "yes/maybe/no" string would require fuzzy matching and could silently mis-route tickets.
+        </div>
+      </div>
+    </div>
+
+    <!-- Routing logic -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#f0b040"></div>Routing decision tables
+      </div>
+      <div class="panel-section-body">
+        <div class="info-title" style="margin-bottom:6px">Gate 1 — triggers human review if…</div>
+        <table class="routing-table">
+          <tr><th>Condition</th><th>Why</th></tr>
+          <tr><td><span class="tag tag-amber">billing</span> or <span class="tag tag-amber">account</span> category</td><td>Financial / security risk</td></tr>
+          <tr><td><span class="tag tag-coral">high</span> or <span class="tag tag-coral">urgent</span> priority</td><td>Customer impact</td></tr>
+          <tr><td>confidence &lt; 0.70</td><td>Model unsure of classification</td></tr>
+        </table>
+        <div class="divider"></div>
+        <div class="info-title" style="margin-bottom:6px">Gate 2 — triggers human review if…</div>
+        <table class="routing-table">
+          <tr><th>Condition</th><th>Why</th></tr>
+          <tr><td><code>needs_escalation = True</code></td><td>LLM flagged itself</td></tr>
+          <tr><td>resolution confidence &lt; 0.80</td><td>Low-quality draft</td></tr>
+          <tr><td><span class="tag tag-coral">high</span> / <span class="tag tag-coral">urgent</span> priority</td><td>Double-check high stakes</td></tr>
+          <tr><td><span class="tag tag-amber">billing</span> / <span class="tag tag-amber">account</span></td><td>Sensitive categories again</td></tr>
+        </table>
+        <div class="divider"></div>
+        <div class="info-title" style="margin-bottom:6px">Gate 2 — human choices</div>
+        <table class="routing-table">
+          <tr><th>Decision</th><th>Effect</th></tr>
+          <tr><td><span class="tag tag-teal">approve</span></td><td>Draft sent as-is</td></tr>
+          <tr><td><span class="tag tag-purple">edit</span></td><td>Human replaces text</td></tr>
+          <tr><td><span class="tag tag-coral">escalate</span></td><td>Routes to specialist</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- RAG -->
+    <div class="panel-section">
+      <div class="panel-section-header">
+        <div class="dot" style="background:#38d4a8"></div>Knowledge retrieval (RAG)
+      </div>
+      <div class="panel-section-body">
+        <div class="info-body">
+          <code>simple_retrieve(query, category, top_k=3)</code> scores each of 6 KB articles:
+        </div>
+        <div class="field-list" style="margin-top:6px">
+          <div class="field-row"><span class="field-name">+3 pts</span><span class="field-note">category match</span></div>
+          <div class="field-row"><span class="field-name">+N pts</span><span class="field-note">word overlap with title+content</span></div>
+          <div class="field-row"><span class="field-name">top-3</span><span class="field-note">injected into LLM prompt</span></div>
+        </div>
+        <div class="callout teal" style="margin-top:6px">Why not vector search? This lab uses keyword overlap intentionally — simpler to understand and debug. The same pipeline works with any retriever (FAISS, pgvector) by swapping <code>simple_retrieve</code>.</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- ══════════════════ BOTTOM SECTIONS ══════════════════ -->
+<div class="bottom-sections">
+
+  <!-- Col 1: Data flow -->
+  <div class="bottom-section">
+    <h3>📦 Data flow through the graph</h3>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Input</strong> — <code>customer_id</code> + <code>customer_message</code> enter as the initial state dict.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>classify_ticket</strong> writes 6 new keys to state: category, intent, priority, sentiment, confidence, initial_route.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num amber">3</div>
+        <div class="step-text"><strong>approval_gate</strong> either auto-writes <code>approval_decision = "approved"</code> or suspends — the state is checkpointed to SQLite at this exact point.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num teal">4</div>
+        <div class="step-text"><strong>retrieve_knowledge</strong> writes <code>retrieved_docs: List[Dict]</code> — a list of matching KB articles passed forward to the LLM.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">5</div>
+        <div class="step-text"><strong>draft_resolution</strong> writes <code>draft_response</code>, <code>needs_escalation</code>, <code>escalation_reason</code>, <code>resolution_confidence</code>.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num amber">6</div>
+        <div class="step-text"><strong>final_review_gate</strong> either auto-approves or suspends a second time. Human can overwrite <code>final_response</code> directly.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num teal">7</div>
+        <div class="step-text"><strong>resolve_case</strong> or <strong>escalate_case</strong> writes final <code>status</code> and <code>final_response</code> — the only values the caller actually reads.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Col 2: Design decisions -->
+  <div class="bottom-section">
+    <h3>🏗 Key design decisions explained</h3>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="info-icon">🪪</div>
+        <div class="step-text"><strong>Separate classify from resolve.</strong> Classification is cheap (one LLM call, tiny output). Resolution is expensive (retrieval + long prompt). Splitting them means Gate 1 can reject bad classifications before spending tokens on a draft.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">🛑</div>
+        <div class="step-text"><strong>Two gates, not one.</strong> A single gate forces a choice: review classification (early, cheap) or review draft (late, safe). Two gates give both. Gate 1 catches routing errors; Gate 2 catches bad responses.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">🔑</div>
+        <div class="step-text"><strong>thread_id per customer session.</strong> Means a customer calling back can have their previous context restored. Multiple concurrent customers run in isolated threads — no state bleed.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">📊</div>
+        <div class="step-text"><strong>Confidence thresholds (0.70 / 0.80).</strong> These gate thresholds let you tune automation vs oversight — lower them for more human review, raise them for higher throughput. They're the key operational knob.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">🧩</div>
+        <div class="step-text"><strong>Retrieval before drafting.</strong> The KB docs are injected into the LLM prompt so the model is grounded in policy. Without this, GPT-4o-mini would hallucinate refund timelines or password reset steps.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Col 3: How to run / extend -->
+  <div class="bottom-section">
+    <h3>🚀 How it runs &amp; how to extend</h3>
+    <div class="step-list">
+      <div class="step-item">
+        <div class="info-icon">▶️</div>
+        <div class="step-text"><strong>Run:</strong> <code>graph.invoke(ticket_input, config)</code> — blocks until the first interrupt or END.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">⏸️</div>
+        <div class="step-text"><strong>Resume:</strong> <code>graph.invoke(Command(resume={...}), config)</code> — restores from SQLite checkpoint and continues from the paused node.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">🔍</div>
+        <div class="step-text"><strong>Inspect:</strong> <code>graph.get_state(config)</code> — returns the full state dict at any point, including pending interrupts.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">🔄</div>
+        <div class="step-text"><strong>Swap the retriever.</strong> Replace <code>simple_retrieve</code> with a vector store. The node signature stays identical — only the retrieval implementation changes.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">➕</div>
+        <div class="step-text"><strong>Add a node.</strong> <code>builder.add_node("new_step", fn)</code> + <code>add_edge()</code>. The state dict is extended with new keys — existing nodes are unaffected.</div>
+      </div>
+      <div class="step-item">
+        <div class="info-icon">📬</div>
+        <div class="step-text"><strong>Production path.</strong> Replace <code>SqliteSaver</code> with <code>PostgresSaver</code> (same API), deploy behind a webhook that calls <code>graph.invoke</code> on each human review action.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <div id="tt-body"></div>
+</div>
+
+<script>
+const tips = {
+  classify: {
+    title: 'classify_ticket',
+    body: `Calls <span class="tt-code">classifier = llm.with_structured_output(TicketClassification)</span>.
+    <br><br>Sets <span class="tt-code">initial_route = "retrieve"</span> for known intents, <span class="tt-code">"escalate"</span> for unknown ones. Result written to SupportState.`
+  },
+  approval: {
+    title: 'approval_gate — Gate 1',
+    body: `Triggers <span class="tt-code">interrupt()</span> when: category is billing/account, priority is high/urgent, or confidence &lt; 0.70.
+    <br><br>Resumed via <span class="tt-code">Command(resume={"decision": "approved", "notes": "..."})</span>.`
+  },
+  retrieve: {
+    title: 'retrieve_knowledge',
+    body: `<span class="tt-code">simple_retrieve(query, category, top_k=3)</span>
+    <br><br>Scores 6 KB articles by category match (+3 pts) + word overlap. Top-3 docs injected into the resolution prompt as grounding context.`
+  },
+  draft: {
+    title: 'draft_resolution',
+    body: `Calls <span class="tt-code">resolver = llm.with_structured_output(ResolutionDecision)</span>.
+    <br><br>Prompt includes: customer message, classification fields, approval notes, and retrieved KB docs. Returns draft + escalation decision.`
+  },
+  final: {
+    title: 'final_review_gate — Gate 2',
+    body: `Triggers <span class="tt-code">interrupt()</span> when needs_escalation=True, confidence&lt;0.80, priority is high/urgent, or category is billing/account.
+    <br><br>Human choices: <b>approve</b> · <b>edit</b> (overrides draft) · <b>escalate</b> (forces escalation path).`
+  },
+  resolve: {
+    title: 'resolve_case',
+    body: `Terminal node. No LLM call. Sets <span class="tt-code">status = "resolved"</span> and copies <span class="tt-code">final_response</span> from state. The caller reads these two keys.`
+  },
+  escalate: {
+    title: 'escalate_case',
+    body: `Terminal node. Sets <span class="tt-code">status = "escalated"</span>. Writes a message to <span class="tt-code">final_response</span> that includes the <span class="tt-code">escalation_reason</span>. Routed here from Gate 1 or Gate 2.`
+  }
+};
+
+const tt = document.getElementById('tooltip');
+document.querySelectorAll('[data-tt]').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    const k = el.dataset.tt;
+    if (!tips[k]) return;
+    document.getElementById('tt-title').textContent = tips[k].title;
+    document.getElementById('tt-body').innerHTML = tips[k].body;
+    tt.classList.add('show');
+  });
+  el.addEventListener('mousemove', e => {
+    tt.style.left = (e.clientX + 16) + 'px';
+    tt.style.top  = (e.clientY + 16) + 'px';
+  });
+  el.addEventListener('mouseleave', () => tt.classList.remove('show'));
+});
+</script>
+</body>
+</html>
