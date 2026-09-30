@@ -62,10 +62,17 @@ def approval_gate(state: SupportState) -> SupportState:
     """
     # docstring: explains conditions when human review is needed
 
+    # Deterministic invariant check: scan raw message for financial/credential keywords
+    # to prevent prompt injections from spoofing classification into auto-approval
+    msg = str(state.get("customer_message", "")).lower()
+    SENSITIVE_TERMS = {"refund", "chargeback", "charge", "billing", "credit", "admin", "password reset", "credential"}
+    has_sensitive_terms = any(kw in msg for kw in SENSITIVE_TERMS)
+
     needs_human_gate = (
         state.get("priority") in ["high", "urgent"]
         or state.get("classification_confidence", 0) < 0.70
         or state.get("category") in ["billing", "account"]
+        or has_sensitive_terms
     )
     # determine if the ticket should be reviewed by a human:
     # if priority is high/urgent, confidence is low, or category is sensitive
@@ -181,11 +188,16 @@ def final_review_gate(state: SupportState) -> SupportState:
     """
     # docstring: explains when to require final human review
 
+    msg = str(state.get("customer_message", "")).lower()
+    SENSITIVE_TERMS = {"refund", "chargeback", "charge", "billing", "credit", "admin", "password reset", "credential"}
+    has_sensitive_terms = any(kw in msg for kw in SENSITIVE_TERMS)
+
     must_review = (
         state.get("needs_escalation", False)
         or state.get("resolution_confidence", 0) < 0.80
         or state.get("priority") in ["high", "urgent"]
         or state.get("category") in ["billing", "account"]
+        or has_sensitive_terms
     )
     # decide if final human review is required based on flags or low confidence
 
